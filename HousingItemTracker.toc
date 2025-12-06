@@ -1,0 +1,11 @@
+## Interface: 110200
+## Title: Housing Item Tracker
+## Notes: Markiert alle Items, die für Housing-Crafting benötigt werden
+## Author: YourName
+## Version: 1.0.0
+## SavedVariables: HousingItemTrackerDB
+
+HousingItemTrackerDB.lua
+HousingItemTracker.lua
+Integrations.lua
+
