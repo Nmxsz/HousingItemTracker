@@ -4,6 +4,70 @@
 local addonName = "HousingItemTracker"
 local HousingItemTracker = CreateFrame("Frame")
 
+-- Localization
+local L = {}
+
+-- English (Default)
+L["HOUSING"] = "Housing"
+L["USED_IN_CRAFTING"] = "Used in Housing recipes"
+L["DECOR_COST"] = "Decor Cost"
+L["CATEGORY"] = "Category"
+L["SOURCE"] = "Source"
+L["VENDORS"] = "Vendors"
+L["MAP_AVAILABLE"] = "<Map available>"
+L["MATERIALS"] = "Materials"
+L["PROFESSION"] = "Profession"
+L["ACHIEVEMENT"] = "Achievement"
+L["QUEST"] = "Quest"
+
+-- German
+if GetLocale() == "deDE" then
+    L["HOUSING"] = "Behausung"
+    L["USED_IN_CRAFTING"] = "Verwendet für Behausung-Rezepte"
+    L["DECOR_COST"] = "Deko-Kosten"
+    L["CATEGORY"] = "Kategorie"
+    L["SOURCE"] = "Quelle"
+    L["VENDORS"] = "Händler"
+    L["MAP_AVAILABLE"] = "<Karte verfügbar>"
+    L["MATERIALS"] = "Materialien"
+    L["PROFESSION"] = "Beruf"
+    L["ACHIEVEMENT"] = "Erfolg"
+    L["QUEST"] = "Quest"
+end
+
+-- French
+if GetLocale() == "frFR" then
+    L["HOUSING"] = "Logement"
+    L["USED_IN_CRAFTING"] = "Utilisé dans les recettes de logement"
+    L["DECOR_COST"] = "Coût de décoration"
+    L["CATEGORY"] = "Catégorie"
+    L["SOURCE"] = "Source"
+    L["VENDORS"] = "Vendeurs"
+    L["MAP_AVAILABLE"] = "<Carte disponible>"
+    L["MATERIALS"] = "Matériaux"
+    L["PROFESSION"] = "Métier"
+    L["ACHIEVEMENT"] = "Haut fait"
+    L["QUEST"] = "Quête"
+end
+
+-- Spanish
+if GetLocale() == "esES" or GetLocale() == "esMX" then
+    L["HOUSING"] = "Vivienda"
+    L["USED_IN_CRAFTING"] = "Usado en recetas de vivienda"
+    L["DECOR_COST"] = "Coste de decoración"
+    L["CATEGORY"] = "Categoría"
+    L["SOURCE"] = "Fuente"
+    L["VENDORS"] = "Vendedores"
+    L["MAP_AVAILABLE"] = "<Mapa disponible>"
+    L["MATERIALS"] = "Materiales"
+    L["PROFESSION"] = "Profesión"
+    L["ACHIEVEMENT"] = "Logro"
+    L["QUEST"] = "Misión"
+end
+
+local addonName = "HousingItemTracker"
+local HousingItemTracker = CreateFrame("Frame")
+
 -- Frame für Vendor-Karten-Anzeige
 local VendorMapFrame = CreateFrame("Frame", "HousingVendorMapFrame", UIParent)
 VendorMapFrame:SetSize(256, 256)
@@ -154,7 +218,7 @@ end)
 -- Lade die Datenbank (wird vom Scraper generiert)
 if not HousingItemTrackerDB then
     HousingItemTrackerDB = {
-        version = 1,
+        version = 2,
         items = {
             materials = {},
             decorItems = {},
@@ -163,12 +227,6 @@ if not HousingItemTrackerDB then
 end
 
 local DB = HousingItemTrackerDB.items
-
--- Prüft ob ein Item für Housing benötigt wird (Material)
-local function IsHousingItem(itemId)
-    if not itemId then return false end
-    return DB.materials[itemId] == true
-end
 
 -- Prüft ob ein Item in irgendeinem Decor-Item als Material verwendet wird
 local function IsUsedInCrafting(itemId)
@@ -189,7 +247,7 @@ end
 
 -- Kombinierte Prüfung: Ist es ein Housing-relevantes Item?
 local function IsHousingRelated(itemId)
-    return IsHousingItem(itemId) or IsUsedInCrafting(itemId)
+    return IsUsedInCrafting(itemId)
 end
 
 -- Prüft ob ein Item ein Decor-Item ist (optional, für zukünftige Erweiterungen)
@@ -202,22 +260,17 @@ end
 local function AddTooltipInfo(tooltip, itemId)
     if not itemId then return end
     
-    local isMaterial = IsHousingItem(itemId)
     local isDecor = IsDecorItem(itemId)
     local isUsedInCrafting = IsUsedInCrafting(itemId)
     local decorInfo = DB.decorItems and DB.decorItems[itemId]
     
-    if isMaterial or isDecor or isUsedInCrafting then
+    if isDecor or isUsedInCrafting then
         tooltip:AddLine(" ") -- Leerzeile
         tooltip:AddLine("|cFF00FF00[Housing]|r", 1, 1, 1)
         
-        if isMaterial then
-            tooltip:AddLine("Benötigt für Housing-Crafting", 0.8, 0.8, 0.8)
-        end
-        
-        if isUsedInCrafting and not isMaterial then
+        if isUsedInCrafting then
             -- Zeige in welchen Decor-Items dieses Material verwendet wird
-            tooltip:AddLine("Verwendet in Housing-Rezepten", 0.8, 0.8, 0.8)
+            tooltip:AddLine(L["USED_IN_CRAFTING"], 0.8, 0.8, 0.8)
         end
         
         if decorInfo then
@@ -234,13 +287,13 @@ local function AddTooltipInfo(tooltip, itemId)
             -- Zeige Sources
             if decorInfo.sources and #decorInfo.sources > 0 then
                 local sourcesText = table.concat(decorInfo.sources, ", ")
-                tooltip:AddDoubleLine("Source:", sourcesText, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
+                tooltip:AddDoubleLine(L["SOURCE"] .. ":", sourcesText, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
             end
             
             -- Zeige Vendor-Informationen
             if decorInfo.vendors and #decorInfo.vendors > 0 then
                 tooltip:AddLine(" ")
-                tooltip:AddLine("|cFFFFD700Vendors:|r", 0.9, 0.9, 0.9)
+                tooltip:AddLine("|cFFFFD700" .. L["VENDORS"] .. ":|r", 0.9, 0.9, 0.9)
                 
                 local firstVendorWithMap = nil
                 
@@ -289,7 +342,7 @@ local function AddTooltipInfo(tooltip, itemId)
             -- Zeige Materials (für Crafting-Items)
             if decorInfo.materials and #decorInfo.materials > 0 then
                 tooltip:AddLine(" ")
-                tooltip:AddLine("|cFF00CCFFMaterials:|r", 0.9, 0.9, 0.9)
+                tooltip:AddLine("|cFF00CCFF" .. L["MATERIALS"] .. ":|r", 0.9, 0.9, 0.9)
                 
                 for _, material in ipairs(decorInfo.materials) do
                     local matText = "  " .. material.quantity .. "x " .. (material.name or "Item " .. material.id)
@@ -299,17 +352,17 @@ local function AddTooltipInfo(tooltip, itemId)
             
             -- Zeige Profession (falls Crafting)
             if decorInfo.profession then
-                tooltip:AddDoubleLine("Profession:", decorInfo.profession, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
+                tooltip:AddDoubleLine(L["PROFESSION"] .. ":", decorInfo.profession, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
             end
             
             -- Zeige Achievement (falls vorhanden)
             if decorInfo.achievement then
-                tooltip:AddDoubleLine("Achievement:", decorInfo.achievement, 0.8, 0.8, 0.8, 1, 0.5, 0)
+                tooltip:AddDoubleLine(L["ACHIEVEMENT"] .. ":", decorInfo.achievement, 0.8, 0.8, 0.8, 1, 0.5, 0)
             end
             
             -- Zeige Quest (falls vorhanden)
             if decorInfo.quest then
-                tooltip:AddDoubleLine("Quest:", decorInfo.quest, 0.8, 0.8, 0.8, 1, 0.8, 0)
+                tooltip:AddDoubleLine(L["QUEST"] .. ":", decorInfo.quest, 0.8, 0.8, 0.8, 1, 0.8, 0)
             end
         end
     end
@@ -324,6 +377,7 @@ local function GetItemIdFromLink(itemLink)
 end
 
 -- Hook für GameTooltip (moderner Ansatz für Retail WoW)
+-- Dieser Hook ist für normale Tooltips (Bags, Inventar, etc.)
 local function OnTooltipSetItem(tooltip)
     if not tooltip then return end
     
@@ -333,7 +387,12 @@ local function OnTooltipSetItem(tooltip)
         if itemLink then
             local itemId = GetItemIdFromLink(itemLink)
             if itemId then
-                AddTooltipInfo(tooltip, itemId)
+                -- NUR für Materials anzeigen (nicht für Decor-Items in Bags)
+                -- Das verhindert Probleme wenn Material-IDs und Decor-IDs überlappen
+                if IsUsedInCrafting(itemId) then
+                    -- Es ist ein Material oder wird in Crafting verwendet
+                    AddTooltipInfo(tooltip, itemId)
+                end
             end
         end
     end
@@ -464,7 +523,7 @@ local function UpdateInventorySlotIcon(slotId)
     end
     
     if button then
-        if itemId and IsHousingItem(itemId) then
+        if itemId and IsUsedInCrafting(itemId) then
             if not button.housingIcon then
                 button.housingIcon = button:CreateTexture(nil, "OVERLAY", nil, 7)
                 button.housingIcon:SetTexture("Interface\\AddOns\\HousingItemTracker\\textures\\decorCost")
@@ -580,17 +639,29 @@ HousingItemTracker:SetScript("OnEvent", function(self, event, ...)
             C_Timer.After(3, SetupHousingDashboardHooks) -- Nochmal später für sicheren Hook
             
             -- Zähle Items in der Datenbank
-            local itemCount = 0
+            local materialCount = 0
             for _ in pairs(DB.materials) do
-                itemCount = itemCount + 1
+                materialCount = materialCount + 1
+            end
+            
+            local decorCount = 0
+            if DB.decorItems then
+                for _ in pairs(DB.decorItems) do
+                    decorCount = decorCount + 1
+                end
             end
             
             -- Zeige Lade-Nachricht im Chat
             print("|cFF00FF00===================================|r")
             print("|cFF00FF00Housing Item Tracker|r |cFFFFFFFFv" .. HousingItemTrackerDB.version .. "|r")
             print("|cFFFFFFFFErfolgreich geladen!|r")
-            print("|cFFFFFFFF" .. itemCount .. " Housing-Materialien|r in der Datenbank")
+            print("|cFFFFFFFF" .. decorCount .. " Decor-Items|r")
+            print("|cFFFFFFFF" .. materialCount .. " Crafting-Materialien|r")
             print("|cFF00FF00===================================|r")
+            print(" ")
+            print("|cFF88AAFFNeue AddOn-Ideen?|r")
+            print("|cFFFFFFFFBesuche:|r |cFF00FF00https://www.addon-forge.de/|r")
+            print(" ")
             
             -- Initiales Update nach kurzer Verzögerung
             C_Timer.After(1, function()
@@ -726,7 +797,7 @@ SlashCmdList["HOUSINGITEMTRACKER"] = function(msg)
         
         -- Teste ein bekanntes Item
         local testItemId = 2325 -- Erstes Item in der DB
-        print("Test Item 2325 ist Housing Item: " .. tostring(IsHousingItem(testItemId)))
+        print("Test Item 2325 ist Housing Item: " .. tostring(IsUsedInCrafting(testItemId)))
     elseif msg == "test" then
         print("|cFF00FF00Housing Item Tracker:|r Teste Icon-System...")
         UpdateAllBagSlots()
@@ -741,7 +812,7 @@ SlashCmdList["HOUSINGITEMTRACKER"] = function(msg)
                 print("BankFrameItem" .. slotID .. " gefunden")
                 local itemId = C_Container.GetContainerItemID(-1, slotID)
                 if itemId then
-                    print("  Item: " .. itemId .. " - Housing: " .. tostring(IsHousingItem(itemId)))
+                    print("  Item: " .. itemId .. " - Housing: " .. tostring(IsUsedInCrafting(itemId)))
                 end
             else
                 print("BankFrameItem" .. slotID .. " NICHT gefunden")
