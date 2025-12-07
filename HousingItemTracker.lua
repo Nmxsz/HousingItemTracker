@@ -500,6 +500,14 @@ local function SetupHousingDashboardHooks()
             -- caller = die CallbackRegistry (ignorieren)
             -- catalogEntryFrame = der HousingCatalogEntry Frame
             -- tooltip = GameTooltip
+            
+            -- NUR im Housing Dashboard Catalog anzeigen, NICHT im Editor Mode
+            -- Prüfe ob wir im House Editor sind
+            if C_HouseEditor and C_HouseEditor.IsHouseEditorActive() then
+                -- Im Editor Mode - KEINE zusätzlichen Infos anzeigen
+                return
+            end
+            
             if catalogEntryFrame and catalogEntryFrame.entryInfo then
                 -- Das entryInfo hat eine decorID für Decor-Items
                 local decorID = catalogEntryFrame.entryInfo.entryID and catalogEntryFrame.entryInfo.entryID.recordID
