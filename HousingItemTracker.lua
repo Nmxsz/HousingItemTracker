@@ -4,6 +4,153 @@
 local addonName = "HousingItemTracker"
 local HousingItemTracker = CreateFrame("Frame")
 
+-- Frame für Vendor-Karten-Anzeige
+local VendorMapFrame = CreateFrame("Frame", "HousingVendorMapFrame", UIParent)
+VendorMapFrame:SetSize(256, 256)
+VendorMapFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -100)
+VendorMapFrame:Hide()
+VendorMapFrame:SetFrameStrata("TOOLTIP")
+VendorMapFrame:SetFrameLevel(1000)
+
+-- Background
+VendorMapFrame.bg = VendorMapFrame:CreateTexture(nil, "BACKGROUND")
+VendorMapFrame.bg:SetAllPoints()
+VendorMapFrame.bg:SetColorTexture(0, 0, 0, 0.8)
+
+-- Border
+VendorMapFrame.border = VendorMapFrame:CreateTexture(nil, "BORDER")
+VendorMapFrame.border:SetAllPoints()
+VendorMapFrame.border:SetColorTexture(0.3, 0.3, 0.3, 1)
+VendorMapFrame.border:SetPoint("TOPLEFT", -1, 1)
+VendorMapFrame.border:SetPoint("BOTTOMRIGHT", 1, -1)
+
+-- Map Texture
+VendorMapFrame.texture = VendorMapFrame:CreateTexture(nil, "ARTWORK")
+VendorMapFrame.texture:SetPoint("TOPLEFT", 4, -4)
+VendorMapFrame.texture:SetPoint("BOTTOMRIGHT", -4, 4)
+
+-- Map Pin (eigene Texture)
+VendorMapFrame.pin = VendorMapFrame:CreateTexture(nil, "OVERLAY")
+VendorMapFrame.pin:SetTexture("Interface\\AddOns\\HousingItemTracker\\textures\\map-pin")
+VendorMapFrame.pin:SetSize(32, 32)  -- Etwas größer für bessere Sichtbarkeit
+VendorMapFrame.pin:Hide()
+
+-- Title
+VendorMapFrame.title = VendorMapFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+VendorMapFrame.title:SetPoint("TOP", 0, -8)
+VendorMapFrame.title:SetTextColor(1, 0.82, 0)
+
+-- Close Button
+VendorMapFrame.close = CreateFrame("Button", nil, VendorMapFrame, "UIPanelCloseButton")
+VendorMapFrame.close:SetPoint("TOPRIGHT", 2, 2)
+
+-- Funktion zum Anzeigen der Karte
+function VendorMapFrame:ShowMap(mapTexture, locationName, coordX, coordY)
+    if not mapTexture then return end
+    
+    self.texture:SetTexture(mapTexture)
+    self.title:SetText(locationName or "Vendor Location")
+    
+    -- Intelligente Positionierung neben dem GameTooltip
+    local tooltip = GameTooltip
+
+   -- Speichere Tooltip-Referenz
+   self.anchoredTooltip = GameTooltip
+    
+   -- Intelligente Positionierung
+   self:UpdatePosition()
+    
+    -- Zeige Map Pin falls Koordinaten vorhanden
+    if coordX and coordY then
+        -- Konvertiere % Koordinaten (0-100) zu Pixel-Position auf der Karte
+        -- Die Karte ist 256x256, aber wir haben 4px Padding
+        local mapWidth = 256 - 8  -- 4px links + 4px rechts
+        local mapHeight = 256 - 8  -- 4px oben + 4px unten
+        
+        -- X/Y sind in Prozent (0-100), konvertiere zu Pixel-Offset
+        local pixelX = (coordX / 100) * mapWidth
+        local pixelY = (coordY / 100) * mapHeight
+        
+        -- Setze Pin-Position (relativ zur Karte)
+        -- Y muss invertiert werden (0 = oben in WoW)
+        self.pin:ClearAllPoints()
+        self.pin:SetPoint("CENTER", self.texture, "TOPLEFT", pixelX, -pixelY)
+        self.pin:Show()
+    else
+        self.pin:Hide()
+    end
+    
+    self:Show()
+end
+
+-- Update Position Funktion
+function VendorMapFrame:UpdatePosition()
+    local tooltip = self.anchoredTooltip or GameTooltip
+    
+    if not tooltip or not tooltip:IsShown() then
+        return
+    end
+    
+    self:ClearAllPoints()
+    
+    -- Hole Tooltip-Position und Größe
+    local tooltipLeft = tooltip:GetLeft()
+    local tooltipRight = tooltip:GetRight()
+    local tooltipTop = tooltip:GetTop()
+    
+    if not tooltipLeft or not tooltipRight or not tooltipTop then
+        -- Fallback Position
+        self:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
+        return
+    end
+    
+    -- Bildschirm-Breite
+    local screenWidth = GetScreenWidth()
+    
+    -- Map-Breite
+    local mapWidth = self:GetWidth()
+    
+    -- Prüfe ob Platz rechts vom Tooltip ist
+    local spaceOnRight = screenWidth - tooltipRight
+    
+    if spaceOnRight >= (mapWidth + 20) then
+        -- Genug Platz rechts - zeige rechts
+        self:SetPoint("TOPLEFT", tooltip, "TOPRIGHT", 15, 0)
+    else
+        -- Kein Platz rechts - versuche links
+        local spaceOnLeft = tooltipLeft
+        
+        if spaceOnLeft >= (mapWidth + 20) then
+            -- Platz links - zeige links
+            self:SetPoint("TOPRIGHT", tooltip, "TOPLEFT", -15, 0)
+        else
+            -- Kein Platz links oder rechts - zeige unterhalb
+            self:SetPoint("TOP", tooltip, "BOTTOM", 0, -15)
+        end
+    end
+end
+
+-- OnUpdate: Verstecke wenn Tooltip verschwindet und aktualisiere Position
+VendorMapFrame:SetScript("OnUpdate", function(self, elapsed)
+    if not self.anchoredTooltip or not self.anchoredTooltip:IsShown() then
+        self:Hide()
+        self.anchoredTooltip = nil
+    else
+        -- Aktualisiere Position falls Tooltip sich bewegt hat
+        if not self.updateTimer then
+            self.updateTimer = 0
+        end
+        
+        self.updateTimer = self.updateTimer + elapsed
+        
+        -- Aktualisiere Position alle 0.1 Sekunden
+        if self.updateTimer >= 0.1 then
+            self.updateTimer = 0
+            self:UpdatePosition()
+        end
+    end
+end)
+
 -- Lade die Datenbank (wird vom Scraper generiert)
 if not HousingItemTrackerDB then
     HousingItemTrackerDB = {
@@ -17,10 +164,32 @@ end
 
 local DB = HousingItemTrackerDB.items
 
--- Prüft ob ein Item für Housing benötigt wird
+-- Prüft ob ein Item für Housing benötigt wird (Material)
 local function IsHousingItem(itemId)
     if not itemId then return false end
     return DB.materials[itemId] == true
+end
+
+-- Prüft ob ein Item in irgendeinem Decor-Item als Material verwendet wird
+local function IsUsedInCrafting(itemId)
+    if not itemId or not DB.decorItems then return false end
+    
+    for decorId, decorInfo in pairs(DB.decorItems) do
+        if decorInfo.materials then
+            for _, material in ipairs(decorInfo.materials) do
+                if material.id == itemId then
+                    return true
+                end
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Kombinierte Prüfung: Ist es ein Housing-relevantes Item?
+local function IsHousingRelated(itemId)
+    return IsHousingItem(itemId) or IsUsedInCrafting(itemId)
 end
 
 -- Prüft ob ein Item ein Decor-Item ist (optional, für zukünftige Erweiterungen)
@@ -35,8 +204,10 @@ local function AddTooltipInfo(tooltip, itemId)
     
     local isMaterial = IsHousingItem(itemId)
     local isDecor = IsDecorItem(itemId)
+    local isUsedInCrafting = IsUsedInCrafting(itemId)
+    local decorInfo = DB.decorItems and DB.decorItems[itemId]
     
-    if isMaterial or isDecor then
+    if isMaterial or isDecor or isUsedInCrafting then
         tooltip:AddLine(" ") -- Leerzeile
         tooltip:AddLine("|cFF00FF00[Housing]|r", 1, 1, 1)
         
@@ -44,8 +215,102 @@ local function AddTooltipInfo(tooltip, itemId)
             tooltip:AddLine("Benötigt für Housing-Crafting", 0.8, 0.8, 0.8)
         end
         
-        if isDecor then
-            tooltip:AddLine("Housing Decor-Item", 0.8, 0.8, 0.8)
+        if isUsedInCrafting and not isMaterial then
+            -- Zeige in welchen Decor-Items dieses Material verwendet wird
+            tooltip:AddLine("Verwendet in Housing-Rezepten", 0.8, 0.8, 0.8)
+        end
+        
+        if decorInfo then
+                    
+            -- -- Zeige Kategorie
+            -- if decorInfo.category then
+            --     local categoryText = decorInfo.category
+            --     if decorInfo.subcategory then
+            --         categoryText = categoryText .. " > " .. decorInfo.subcategory
+            --     end
+            --     tooltip:AddDoubleLine("Category:", categoryText, 0.8, 0.8, 0.8, 0.7, 0.7, 0.7)
+            -- end
+            
+            -- Zeige Sources
+            if decorInfo.sources and #decorInfo.sources > 0 then
+                local sourcesText = table.concat(decorInfo.sources, ", ")
+                tooltip:AddDoubleLine("Source:", sourcesText, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
+            end
+            
+            -- Zeige Vendor-Informationen
+            if decorInfo.vendors and #decorInfo.vendors > 0 then
+                tooltip:AddLine(" ")
+                tooltip:AddLine("|cFFFFD700Vendors:|r", 0.9, 0.9, 0.9)
+                
+                local firstVendorWithMap = nil
+                
+                for _, vendor in ipairs(decorInfo.vendors) do
+                    local vendorText = "  " .. vendor.name
+                    if vendor.location then
+                        vendorText = vendorText .. " (" .. vendor.location .. ")"
+                    end
+                    tooltip:AddLine(vendorText, 0.7, 0.7, 0.7)
+                    
+                    if vendor.price and vendor.currency then
+                        local priceText = "  " .. vendor.price .. " " .. vendor.currency
+                        tooltip:AddLine(priceText, 1, 0.82, 0)
+                    end
+                    
+                    -- Zeige Waypoint falls vorhanden
+                    if vendor.waypoint then
+                        tooltip:AddLine("  |cFF90EE90" .. vendor.waypoint .. "|r", 0.5, 0.9, 0.5)
+                    end
+                    
+                    -- Merke ersten Vendor mit Karte (nur einmal)
+                    if vendor.mapTexture and not firstVendorWithMap then
+                        firstVendorWithMap = vendor
+                    end
+                end
+                
+                -- Zeige "Karte verfügbar" Hinweis nur einmal
+                if firstVendorWithMap and firstVendorWithMap.mapTexture then
+                                        
+                    -- Zeige Karte vom ersten Vendor
+                    VendorMapFrame:ShowMap(
+                        firstVendorWithMap.mapTexture, 
+                        firstVendorWithMap.location,
+                        firstVendorWithMap.coordX,
+                        firstVendorWithMap.coordY
+                    )
+                else
+                    -- Verstecke Karte wenn keine vorhanden
+                    VendorMapFrame:Hide()
+                end
+            else
+                -- Keine Vendors - Karte verstecken
+                VendorMapFrame:Hide()
+            end
+            
+            -- Zeige Materials (für Crafting-Items)
+            if decorInfo.materials and #decorInfo.materials > 0 then
+                tooltip:AddLine(" ")
+                tooltip:AddLine("|cFF00CCFFMaterials:|r", 0.9, 0.9, 0.9)
+                
+                for _, material in ipairs(decorInfo.materials) do
+                    local matText = "  " .. material.quantity .. "x " .. (material.name or "Item " .. material.id)
+                    tooltip:AddLine(matText, 0.8, 0.8, 0.8)
+                end
+            end
+            
+            -- Zeige Profession (falls Crafting)
+            if decorInfo.profession then
+                tooltip:AddDoubleLine("Profession:", decorInfo.profession, 0.8, 0.8, 0.8, 0.7, 0.9, 1)
+            end
+            
+            -- Zeige Achievement (falls vorhanden)
+            if decorInfo.achievement then
+                tooltip:AddDoubleLine("Achievement:", decorInfo.achievement, 0.8, 0.8, 0.8, 1, 0.5, 0)
+            end
+            
+            -- Zeige Quest (falls vorhanden)
+            if decorInfo.quest then
+                tooltip:AddDoubleLine("Quest:", decorInfo.quest, 0.8, 0.8, 0.8, 1, 0.8, 0)
+            end
         end
     end
 end
@@ -60,28 +325,32 @@ end
 
 -- Hook für GameTooltip (moderner Ansatz für Retail WoW)
 local function OnTooltipSetItem(tooltip)
-    local _, itemLink = tooltip:GetItem()
-    if itemLink then
-        local itemId = GetItemIdFromLink(itemLink)
-        if itemId then
-            AddTooltipInfo(tooltip, itemId)
+    if not tooltip then return end
+    
+    -- Prüfe ob der Tooltip die GetItem Methode hat
+    if tooltip.GetItem then
+        local _, itemLink = tooltip:GetItem()
+        if itemLink then
+            local itemId = GetItemIdFromLink(itemLink)
+            if itemId then
+                AddTooltipInfo(tooltip, itemId)
+            end
         end
     end
 end
 
 -- Tooltip-Hook Setup (kompatibel mit modernem WoW)
 local function SetupTooltipHooks()
-    -- Verwende TooltipDataProcessor für moderne WoW-Versionen
-    if TooltipDataProcessor then
+    -- Verwende TooltipDataProcessor für moderne WoW-Versionen (Dragonflight+)
+    if TooltipDataProcessor and Enum.TooltipDataType then
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
             if tooltip == GameTooltip or tooltip == ItemRefTooltip then
                 OnTooltipSetItem(tooltip)
             end
         end)
     else
-        -- Fallback für ältere Versionen
-        GameTooltip:HookScript("OnTooltipSetItem", OnTooltipSetItem)
-        ItemRefTooltip:HookScript("OnTooltipSetItem", OnTooltipSetItem)
+        -- Fallback für ältere Versionen (funktioniert aber nicht in Midnight)
+        -- Diese Events existieren nicht mehr
     end
 end
 
@@ -96,7 +365,8 @@ local function UpdateBagSlotIcon(button)
     
     local itemId = C_Container.GetContainerItemID(bagID, slotID)
     
-    if itemId and IsHousingItem(itemId) then
+    -- Zeige Icon für Materialien UND für Items die in Crafting verwendet werden
+    if itemId and IsHousingRelated(itemId) then
         -- Erstelle Icon wenn noch nicht vorhanden
         if not button.housingIcon then
             -- Erstelle die Texture als Kind des Buttons
@@ -220,6 +490,75 @@ HousingItemTracker:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 HousingItemTracker:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
 HousingItemTracker:RegisterEvent("BANKFRAME_OPENED")
 
+-- Hook für Housing Dashboard und andere UI-Tooltips
+local function SetupHousingDashboardHooks()
+    -- Hook für das Housing Dashboard Catalog Entry Event
+    -- Dies ist der offizielle Event-Hook für Housing Catalog Tooltips
+    -- Parameter Signatur: caller (CallbackRegistry), catalogEntryFrame, tooltip
+    if EventRegistry and not _G.HousingItemTrackerCatalogHooked then
+        EventRegistry:RegisterCallback("HousingCatalogEntry.TooltipCreated", function(caller, catalogEntryFrame, tooltip)
+            -- caller = die CallbackRegistry (ignorieren)
+            -- catalogEntryFrame = der HousingCatalogEntry Frame
+            -- tooltip = GameTooltip
+            if catalogEntryFrame and catalogEntryFrame.entryInfo then
+                -- Das entryInfo hat eine decorID für Decor-Items
+                local decorID = catalogEntryFrame.entryInfo.entryID and catalogEntryFrame.entryInfo.entryID.recordID
+                
+                -- Debug: Zeige die decorID
+                if decorID then
+                    -- Temporäres Debug (kann später entfernt werden)
+                    -- print("[Housing] Catalog Entry decorID:", decorID, "Name:", catalogEntryFrame.entryInfo.name)
+                    
+                    -- Für Decor-Items: Zeige Source-Informationen
+                    if DB.decorItems and DB.decorItems[decorID] then
+                        AddTooltipInfo(tooltip, decorID)
+                    else
+                        -- Debug: Item nicht in DB gefunden
+                        -- print("[Housing] DecorID", decorID, "nicht in Datenbank gefunden")
+                        
+                        -- Zeige zumindest eine Basis-Info dass wir es erkannt haben
+                        tooltip:AddLine(" ")
+                        tooltip:AddLine("|cFF00FF00[Housing Item]|r", 1, 1, 1)
+                        tooltip:AddLine("DecorID: " .. decorID, 0.6, 0.6, 0.6)
+                    end
+                end
+            end
+        end)
+        _G.HousingItemTrackerCatalogHooked = true
+    end
+    
+    -- Hook für Hyperlinks (z.B. im Chat oder anderen UIs)
+    if GameTooltip and GameTooltip.SetHyperlink and not GameTooltip.housingHyperlinkHooked then
+        hooksecurefunc(GameTooltip, "SetHyperlink", function(self, link)
+            if link then
+                local itemId = GetItemIdFromLink(link)
+                if itemId then
+                    -- Kleine Verzögerung damit der Tooltip zuerst gerendert wird
+                    C_Timer.After(0.01, function()
+                        AddTooltipInfo(self, itemId)
+                    end)
+                end
+            end
+        end)
+        GameTooltip.housingHyperlinkHooked = true
+    end
+    
+    -- Hook für ItemRefTooltip (wird für Item-Links verwendet)
+    if ItemRefTooltip and ItemRefTooltip.SetHyperlink and not ItemRefTooltip.housingHyperlinkHooked then
+        hooksecurefunc(ItemRefTooltip, "SetHyperlink", function(self, link)
+            if link then
+                local itemId = GetItemIdFromLink(link)
+                if itemId then
+                    C_Timer.After(0.01, function()
+                        AddTooltipInfo(self, itemId)
+                    end)
+                end
+            end
+        end)
+        ItemRefTooltip.housingHyperlinkHooked = true
+    end
+end
+
 HousingItemTracker:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = select(1, ...)
@@ -227,6 +566,10 @@ HousingItemTracker:SetScript("OnEvent", function(self, event, ...)
         if loadedAddon == addonName then
             -- Setup Tooltip-Hooks
             SetupTooltipHooks()
+            
+            -- Setup Housing Dashboard Hooks (verzögert)
+            C_Timer.After(1, SetupHousingDashboardHooks)
+            C_Timer.After(3, SetupHousingDashboardHooks) -- Nochmal später für sicheren Hook
             
             -- Zähle Items in der Datenbank
             local itemCount = 0
