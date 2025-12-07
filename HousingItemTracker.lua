@@ -65,9 +65,6 @@ if GetLocale() == "esES" or GetLocale() == "esMX" then
     L["QUEST"] = "Misión"
 end
 
-local addonName = "HousingItemTracker"
-local HousingItemTracker = CreateFrame("Frame")
-
 -- Frame für Vendor-Karten-Anzeige
 local VendorMapFrame = CreateFrame("Frame", "HousingVendorMapFrame", UIParent)
 VendorMapFrame:SetSize(256, 256)
@@ -222,6 +219,8 @@ if not HousingItemTrackerDB then
         items = {
             materials = {},
             decorItems = {},
+            achievements = {},
+            quests = {},
         },
     }
 end
@@ -256,6 +255,68 @@ local function IsDecorItem(itemId)
     return DB.decorItems and DB.decorItems[itemId] ~= nil
 end
 
+-- Holt den lokalisierten Namen für eine Currency (falls ID vorhanden)
+local function GetLocalizedCurrencyName(currencyId, fallbackName)
+    if currencyId and C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+        local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(currencyId)
+        if currencyInfo and currencyInfo.name then
+            return currencyInfo.name
+        end
+    end
+    return fallbackName or "Currency"
+end
+
+-- Holt den lokalisierten Namen für einen NPC (automatisch via WoW API)
+local function GetLocalizedNPCName(npcId, fallbackName)
+    if npcId and C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+        -- Erstelle NPC-Hyperlink und hole Tooltip-Info
+        local hyperlink = "unit:Creature-0-0-0-0-" .. npcId
+        local tooltipInfo = C_TooltipInfo.GetHyperlink(hyperlink)
+        
+        if tooltipInfo and tooltipInfo.lines and tooltipInfo.lines[1] then
+            local npcName = tooltipInfo.lines[1].leftText
+            if npcName and npcName ~= "" then
+                return npcName
+            end
+        end
+    end
+    
+    -- Fallback auf englischen Namen
+    return fallbackName or ("NPC " .. (npcId or ""))
+end
+
+-- Holt den lokalisierten Achievement-Namen (automatisch via WoW API)
+local function GetLocalizedAchievementName(achievementId, fallbackName)
+    if achievementId then
+
+        if GetAchievementInfo then
+            local id, name = GetAchievementInfo(achievementId)
+            if name and name ~= "" then
+                return name
+            end
+        end
+    end
+    
+    -- Fallback auf englischen Namen oder ID
+    return fallbackName or ("Achievement " .. (achievementId or ""))
+end
+
+-- Holt den lokalisierten Quest-Namen (automatisch via WoW API)
+local function GetLocalizedQuestName(questId, fallbackName)
+    if questId then
+        -- Nutze WoW API für automatische Localization
+        if C_QuestLog and C_QuestLog.GetTitleForQuestID then
+            local questName = C_QuestLog.GetTitleForQuestID(questId)
+            if questName and questName ~= "" then
+                return questName
+            end
+        end
+    end
+    
+    -- Fallback auf englischen Namen oder ID
+    return fallbackName or ("Quest " .. (questId or ""))
+end
+
 -- Fügt Tooltip-Text hinzu
 local function AddTooltipInfo(tooltip, itemId)
     if not itemId then return end
@@ -266,7 +327,7 @@ local function AddTooltipInfo(tooltip, itemId)
     
     if isDecor or isUsedInCrafting then
         tooltip:AddLine(" ") -- Leerzeile
-        tooltip:AddLine("|cFF00FF00[Housing]|r", 1, 1, 1)
+        tooltip:AddLine("|cFF00FF00" .. L["HOUSING"] .. ":|r", 1, 1, 1)
         
         if isUsedInCrafting then
             -- Zeige in welchen Decor-Items dieses Material verwendet wird
@@ -298,14 +359,18 @@ local function AddTooltipInfo(tooltip, itemId)
                 local firstVendorWithMap = nil
                 
                 for _, vendor in ipairs(decorInfo.vendors) do
-                    local vendorText = "  " .. vendor.name
+                    -- Nutze lokalisierte Namen falls IDs vorhanden
+                    local vendorName = GetLocalizedNPCName(vendor.npcId, vendor.name)
+                    local vendorText = "  " .. vendorName
                     if vendor.location then
                         vendorText = vendorText .. " (" .. vendor.location .. ")"
                     end
                     tooltip:AddLine(vendorText, 0.7, 0.7, 0.7)
                     
-                    if vendor.price and vendor.currency then
-                        local priceText = "  " .. vendor.price .. " " .. vendor.currency
+                    if vendor.price then
+                        -- Nutze lokalisierte Currency-Namen
+                        local currencyName = GetLocalizedCurrencyName(vendor.currencyId, vendor.currency)
+                        local priceText = "  " .. vendor.price .. " " .. currencyName
                         tooltip:AddLine(priceText, 1, 0.82, 0)
                     end
                     
@@ -356,13 +421,15 @@ local function AddTooltipInfo(tooltip, itemId)
             end
             
             -- Zeige Achievement (falls vorhanden)
-            if decorInfo.achievement then
-                tooltip:AddDoubleLine(L["ACHIEVEMENT"] .. ":", decorInfo.achievement, 0.8, 0.8, 0.8, 1, 0.5, 0)
+            if decorInfo.achievementId or decorInfo.achievement then
+                local achievementName = GetLocalizedAchievementName(decorInfo.achievementId, decorInfo.achievement)
+                tooltip:AddDoubleLine(L["ACHIEVEMENT"] .. ":", achievementName, 0.8, 0.8, 0.8, 1, 0.5, 0)
             end
             
             -- Zeige Quest (falls vorhanden)
-            if decorInfo.quest then
-                tooltip:AddDoubleLine(L["QUEST"] .. ":", decorInfo.quest, 0.8, 0.8, 0.8, 1, 0.8, 0)
+            if decorInfo.questId or decorInfo.quest then
+                local questName = GetLocalizedQuestName(decorInfo.questId, decorInfo.quest)
+                tooltip:AddDoubleLine(L["QUEST"] .. ":", questName, 0.8, 0.8, 0.8, 1, 0.8, 0)
             end
         end
     end
